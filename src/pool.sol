@@ -239,7 +239,7 @@ contract ThePool {
         minimumTokens = 202000000 * 10 ** 18;
         minimumTokensTransfer = 200000000 * 10 ** 18;
         startVETH = 30 * 10 ** 18;
-        ethToPool = 6.9 * 10 ** 18;
+        ethToPool = 0.69 * 10 ** 18;
 
         feeOwner = _feeOwner;
         factory = _factory;
@@ -709,7 +709,7 @@ contract ThePool {
     // @dev    Migration.
     // @dev    We launch the pools as:
     // @dev    I)
-    // @dev    (i)  Uniswap V4 0.5% || (ii)  Uniswap V4 0.4% || (iii)  Uniswap V4 0.3%
+    // @dev    (i)  Uniswap V4 0.5% || to (ii) Uniswap V4 0.25%
     // @dev    (iv) Uniswap V3 0.3% || (v)   Uniswap V3 1.0% || (vi)   Uniswap V2
     // @dev    in this order, where (iv) and (v) go to (i) and (ii) and bump the rest
     // @dev    up in the order if launch as V4 is deactivated.
@@ -727,29 +727,8 @@ contract ThePool {
         // @dev 50% for 6 months and 50% for 1 year.
         FeeCollector(payable(feeOwner)).lockTokens(bC.token0, id);
 
-        // somethings off with the reward. should bei 0.125 but on a but we got only 0.10x something
-        // when the buy triggered the migrate
-
-        /*
-            new idea: 0.1 eth go to creator, and 0.1 eth to stakers if there are any, if not then 0.2 eth to creator
-        */
-
-        /*target is: 7.1 eth
-        to pool: 6.9
-        to staker: 0.1
-        to creator: 0.1 (0.2 if nobody is staking)
-
-        uint12*/
-
         _migrationSplit(bC.reserve1 - bC.ethPool, bC.creator);
 
-        // v4 pools work with 2500, 3000, 3500, 4000, 4500, 5000, 10000 fee levels
-        // v3 with 3000 and 10000
-        // *how to tell in which order we want to launch? -> array
-        // make to eth required changeable to account for rising/falling prices for ETH.
-        // make it only changeable every 1 month
-        // only do the for loop if entering into v4 check
-        //
         uint256 migratedTo;
         uint256 migratedFee;
         if (bC.launchAsV4) {
