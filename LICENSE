@@ -27,12 +27,15 @@ copyright infringement and may expose you to statutory damages.
 --------------------------------------------------------------------
 “Original Author” ............................ 0x5C18eec0B15B962DAd08a4d2CBAF7C66eE98b93c 
 “Fee Revenue” ...............................  Gross amount credited to
-                                               the pool contract’s
-                                               `feeOnCurve`
-                                               and the migration variables
+                                               feeOwner Contract from
+                                                the pool contract’s
+                                               `feeOnCurve` variable.
+                                               Also the migration variables
                                                as they are set in the pool
                                                contract on Github and on
-                                               Ethereum mainnet.
+                                               Ethereum mainnet. They do not
+                                               depend on production chain
+                                               or testnet.
 
 “Testnet” ................................... Any network whose
                                                chain‑id is *not* listed
@@ -44,8 +47,8 @@ copyright infringement and may expose you to statutory damages.
 2. Revenue‑Share Obligation
 --------------------------------------------------------------------
 Deployments on non‑testnet networks must route **15 % of all Fee Revenue**
-to `alwaysInShare`. Altering or disabling this variable violates the
-licence.
+to `alwaysInShare` in the feeOwner Contract. Altering or disabling this
+variable violates the licence.
 
 --------------------------------------------------------------------
 3. Minimum Fee Floor
@@ -101,4 +104,4 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ---  End of LFG Commercial License v1.0  ---
-SHA256: 07dd692876d2ae8e6f1337086bf3e33b62dc6eb6eb1c9d42d9f246fbfd1caa3d
+SHA256: 935790f223d4eb7fcd8a73fbbc041506bd153e2605de5160d6811f5979ca624e
