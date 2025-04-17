@@ -36,7 +36,7 @@
  */
 
 // SPDX-License-Identifier: LicenseRef-LFG-Commercial
-// Full licence: https://github.com/lfgclub/lfgclub/blob/main/LICENSE
+// Full license: https://github.com/lfgclub/lfgclub/blob/main/LICENSE
 
 import "./pool.sol";
 import "./factoryERC20.sol";
