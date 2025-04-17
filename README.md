@@ -1,5 +1,14 @@
 ## Hi there 👋
 
+# Instructions
+
+aaaaaa
+
+# License
+
+By deploying these contracts on any mainnet or production chain you agree
+to the LFG Commercial License v1.0 (see LICENSE).
+
 <!--
 **lfgclub/lfgclub** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 
