@@ -1,6 +1,6 @@
 /** Source code of this contract can be found on
- * https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol
- * Changes for LFG.CLUB are marked with "added".
+ *  https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol
+ *  Changes for LFG.CLUB are marked with "added".
  */
 // SPDX-License-Identifier: MIT
 
