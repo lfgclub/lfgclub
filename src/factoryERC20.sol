@@ -35,31 +35,8 @@
  *
  */
 
-// SPDX-License-Identifier: MIT
-/**
- * This code is licensed under the MIT License *with the following exception*:
- *
- * Any use of this code — including modified versions — on a non-testnet network must send
- * 15% of all fee revenue, denominated in the native coin of the respective chain (e.g., ETH
- * on Base, ETH on Arbitrum, BNB on BNB Smart Chain), to the original author at:
- *
- * Address: 0xYourAddress
- *
- * This address can be configured in FeeAccount.sol as the `alwaysInShare` address,
- * which will handle the revenue sharing automatically.
- *
- * Deployments of this code on chains where the original author has already deployed
- * the protocol must not set buy/sell fees or Uniswap/Pancakeswap migration fees
- * below those set by the original deployment on that chain.
- *
- * On chains where the original author has not yet deployed the protocol, any deployment
- * must not set fees lower than 0.25% on buy/sell actions or DEX migration features.
- *
- * The first deployments by the original author are on: Ethereum Mainnet, Base, Arbitrum,
- * Unichain, and BNB Smart Chain.
- *
- * Failure to comply with these requirements voids the license.
- */
+// SPDX-License-Identifier: LicenseRef-LFG-Commercial
+// Full licence: https://github.com/lfgclub/lfgclub/blob/main/LICENSE
 pragma solidity ^0.8.20;
 
 import "./standardERC20.sol";
@@ -69,7 +46,7 @@ import "./depositContract.sol";
 import "./metadata.sol";
 
 contract Factory {
-    Token public latestDeployedToken;
+    LFGClubToken public latestDeployedToken;
     address public latestPool;
     address public WETH9 = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
 
@@ -179,21 +156,21 @@ contract Factory {
     function _updateMetadata(uint256 id, string[5] memory metad) public payable {
         (address crtr, , , , , , , , , , , , , , , ) = ThePool(payable(_poolAddress)).getBondingCurve(id);
         uint256 eTP = ThePool(payable(_poolAddress)).ethToPool();
-        uint256 required = 0.05 * 10 ** 18;
+        uint256 required = 0.005 * 10 ** 18;
         // @dev this lowers/highers the amount if certain USD/ETH is reached.
         if (eTP >= 6.9 * 10 ** 18) {
-            required = 0.05 * (10 ** 18) * multiplierNoEth;            
+            required = 0.005 * (10 ** 18) * multiplierNoEth;            
         } else if (eTP >= 4.2 * 10 ** 18) {
-            required = 0.03 * (10 ** 18) * multiplierNoEth;              
+            required = 0.003 * (10 ** 18) * multiplierNoEth;              
         } else if (eTP >= 2.1 * 10 ** 18) {
-            required = 0.02 * (10 ** 18) * multiplierNoEth;
+            required = 0.002 * (10 ** 18) * multiplierNoEth;
         } else {
-            required = 0.05 * (10 ** 18) * multiplierNoEth;            
+            required = 0.005 * (10 ** 18) * multiplierNoEth;            
         }
         // @dev   Token creator
         if (msg.sender == crtr) {
             require(id > 0);
-            require((lastMetaUpdate[id] + 7 days) <= block.timestamp, "WAIT_7_DAYS");
+            require((lastMetaUpdate[id] + 7 minutes) <= block.timestamp, "WAIT_7_DAYS");  //----!! testnet: 7min // mainnet: 7 days
             require(msg.value >= required, "FEE_TOO_LOW");
             emit UpdateMetadata(0, address(0), id, metad[0], metad[1], metad[2], metad[3], metad[4]);
             _tokenAddress[id].updateBlock = uint48(block.number);
@@ -207,7 +184,7 @@ contract Factory {
         // @dev   Community
         } else {
             require(id > 0);
-            require((lastMetaUpdate[id] + 7 days) <= block.timestamp, "WAIT_7_DAYS");
+            require((lastMetaUpdate[id] + 7 minutes) <= block.timestamp, "WAIT_7_DAYS");  //----!! testnet: 7min // mainnet: 7 days
             require(msg.value >= (required*700/200), "FEE_TOO_LOW");
             emit UpdateMetadata(0, address(0), id, metad[0], metad[1], metad[2], metad[3], metad[4]);
             _tokenAddress[id].updateBlock = uint48(block.number);
@@ -290,7 +267,7 @@ contract Factory {
     // @dev    Upgradeability can be renounced.
     function upgradeDepositor(address _address) public onlyCreator {
         require(_depositAddress != address(0), "DEPOSITOR_NOT_SET");
-        require((_lastDepositChange + 366 days) <= block.timestamp,"WAIT_12_MONTHS");  
+        require((_lastDepositChange + 60 minutes) <= block.timestamp,"WAIT_12_MONTHS");   //----!! testnet: 60 min // mainnet: 366 days
         require(!_upgradeOff,"UPGRADE_RENOUNCED");
         _depositAddress = _address;    
         // @dev    This prevents that a non-contract can be set.

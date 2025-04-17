@@ -56,11 +56,11 @@ abstract contract lERC20 is iContext, iERC20, iERC20Metadata, iERC20Errors {
     string private _name;
     string private _symbol;
 
-    constructor(string memory name_, string memory symbol_, uint256 totalSupply_, uint8 decimals_) {
+    constructor(string memory name_, string memory symbol_, uint256 totalSupply_, uint8 decimals__) {
         _name = name_;
         _symbol = symbol_;
         _totalSupply = totalSupply_;
-        _decimals = decimals_;
+        _decimals = decimals__;
 
         _update(address(0), msg.sender, _totalSupply * _decimals); /*added*/
     }

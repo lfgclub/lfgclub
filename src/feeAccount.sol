@@ -35,32 +35,8 @@
  *
  */
 
-// SPDX-License-Identifier: MIT
-/**
- * This code is licensed under the MIT License *with the following exception*:
- *
- * Any use of this code — including modified versions — on a non-testnet network must send
- * 15% of all fee revenue, denominated in the native coin of the respective chain (e.g., ETH
- * on Base, ETH on Arbitrum, BNB on BNB Smart Chain), to the original author at:
- *
- * Address: 0xYourAddress
- *
- * This address can be configured in FeeAccount.sol as the `alwaysInShare` address,
- * which will handle the revenue sharing automatically.
- *
- * Deployments of this code on chains where the original author has already deployed
- * the protocol must not set buy/sell fees or Uniswap/Pancakeswap migration fees
- * below those set by the original deployment on that chain.
- *
- * On chains where the original author has not yet deployed the protocol, any deployment
- * must not set fees lower than 0.25% on buy/sell actions or DEX migration features.
- *
- * The first deployments by the original author are on: Ethereum Mainnet, Base, Arbitrum,
- * Unichain, and BNB Smart Chain.
- *
- * Failure to comply with these requirements voids the license.
- */
-
+// SPDX-License-Identifier: LicenseRef-LFG-Commercial
+// Full licence: https://github.com/lfgclub/lfgclub/blob/main/LICENSE
 pragma solidity ^0.8.20;
 
 import "./standardERC20.sol";
@@ -109,7 +85,7 @@ contract FeeCollector {
     // @dev    usage and modification of this contract is only allowed if
     // @dev    at least 15% of all fees are forwarded to the contract creator.
     // @dev    Here the address is set.
-    address alwaysInShare = 0xe82fAFF9cCD22bAFeE0836Da59Ea6A4E343f1686;
+    address alwaysInShare = 0x5C18eec0B15B962DAd08a4d2CBAF7C66eE98b93c;
 
     uint256 setFeeLast;
     uint256 setSplitLast;
@@ -186,8 +162,8 @@ contract FeeCollector {
         uint256 tokenBalance = ERC20(token).balanceOf(address(this));
         uint256 half = tokenBalance/2;
 
-        uint256 unlockTime1 = 2.5 minutes; // testnet: 2.5 min // mainnet: 183 days
-        uint256 unlockTime2 = 10 minutes; // testnet: 10 min // mainnet: 366 days
+        uint256 unlockTime1 = 2.5 minutes; //---!! testnet: 2.5 min // mainnet: 183 days
+        uint256 unlockTime2 = 10 minutes; //---!! testnet: 10 min // mainnet: 366 days
 
         locks[token].push(LockInfo(half, block.timestamp + unlockTime1));
         locks[token].push(LockInfo(tokenBalance - half, block.timestamp + unlockTime2));
@@ -368,7 +344,7 @@ contract FeeCollector {
     // @dev    Sum of share array must be exactly 10000.
     function changeAuthorization(address[] memory accounts, uint256[] memory shares) public onlyFeeOwner {
         // add that it can only be changed once weekly
-        require((lastChangeAuthorization + 10 minutes) < block.timestamp, "Change only allowed every 10 minutes.");
+        require((lastChangeAuthorization + 10 minutes) < block.timestamp, "Change only allowed every 10 minutes."); //---!! testnet: 10 min // main: 1 week
         // testnet: 10 min // mainnet: 2 weeks
         //
         require((accounts[0] == alwaysInShare) && (shares[0] >= 1500),"Contract creator needs to be in index 0 and over or equal 1500. Read license.");
@@ -434,7 +410,7 @@ contract FeeCollector {
     // @dev    As only feeContract can change the fee we enforce the
     // @dev    1 day wait between fee changes here.
     function setFee(uint256 bps) public onlyFeeOwner {
-        require((setFeeLast + 2 minutes) <= block.timestamp, "WAIT_1_DAY"); // 1 days on mainnet, 2 min on testnet
+        require((setFeeLast + 2 minutes) <= block.timestamp, "WAIT_1_DAY"); //---!! testnet: 2 min // main: 1 day
         address pool = Factory(factoryAddress)._poolAddress();
         ThePool(payable(pool)).setCurveFee(bps);
         setFeeLast = block.timestamp;
@@ -455,7 +431,7 @@ contract FeeCollector {
     // @dev    Can only be between 33% (lowest) and 85% (highest), denominated
     // @dev    as 3300 and 8500.
     function modifySplitting(uint256 number) public onlyFeeOwner {
-        require((setSplitLast + 2 minutes) <= block.timestamp, "WAIT_14_DAYS"); // 14 days on mainnet, 2 min on testnet
+        require((setSplitLast + 2 minutes) <= block.timestamp, "WAIT_14_DAYS"); //---!! testnet 2 min // main: 14 days
         address depositAddress = Factory(factoryAddress)._depositAddress();
         depositor(payable(depositAddress)).modifySplit(number);
         setSplitLast = block.timestamp;
@@ -476,7 +452,7 @@ contract FeeCollector {
 
     // @dev    Updates the ETH needed for pool completion for new bonding curve launches.
     function updateETH(uint256 priceETH) public onlyFeeOwner {
-        require((lastETHChange + 2 minutes) <= block.timestamp, "WAIT_14_DAYS"); // 14 days on mainnet, 2 min on testnet
+        require((lastETHChange + 2 minutes) <= block.timestamp, "WAIT_14_DAYS"); //---!! testnet 2 min // main: 14 days
         address pool = Factory(factoryAddress)._poolAddress();
         ThePool(payable(pool))._updateRequirements(priceETH);
         lastETHChange = block.timestamp;
@@ -629,7 +605,7 @@ contract FeeCollector {
             // @dev    Burn
             IWETH9(nativeToken).transfer(0x000000000000000000000000000000000000dEaD, lockAmount * 6);
             // @dev    Lock
-            lockTokensNative(nativeToken, lockAmount, 183 days, true); // lock
+            lockTokensNative(nativeToken, lockAmount, 184 days, true); // lock
     }
 
 }

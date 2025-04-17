@@ -35,31 +35,8 @@
  *
  */
 
-// SPDX-License-Identifier: MIT
-/**
- * This code is licensed under the MIT License *with the following exception*:
- *
- * Any use of this code — including modified versions — on a non-testnet network must send
- * 15% of all fee revenue, denominated in the native coin of the respective chain (e.g., ETH
- * on Base, ETH on Arbitrum, BNB on BNB Smart Chain), to the original author at:
- *
- * Address: 0xYourAddress
- *
- * This address can be configured in FeeAccount.sol as the `alwaysInShare` address,
- * which will handle the revenue sharing automatically.
- *
- * Deployments of this code on chains where the original author has already deployed
- * the protocol must not set buy/sell fees or Uniswap/Pancakeswap migration fees
- * below those set by the original deployment on that chain.
- *
- * On chains where the original author has not yet deployed the protocol, any deployment
- * must not set fees lower than 0.25% on buy/sell actions or DEX migration features.
- *
- * The first deployments by the original author are on: Ethereum Mainnet, Base, Arbitrum,
- * Unichain, and BNB Smart Chain.
- *
- * Failure to comply with these requirements voids the license.
- */
+// SPDX-License-Identifier: LicenseRef-LFG-Commercial
+// Full licence: https://github.com/lfgclub/lfgclub/blob/main/LICENSE
 
 import "./pool.sol";
 import "./factoryERC20.sol";
@@ -156,7 +133,7 @@ contract depositor {
         require(tokenSet, "DEPOSIT_NOT_ACTIVE");
         require(amount > 0, "NO_0_DEPOSIT");
         require(amount <= IWETH9(token).balanceOf(msg.sender), "NOT_ENOUGH_TOKENS");
-        require((_lastAction[msg.sender] + 10 minutes) <= block.timestamp, "WAIT_10_MIN");
+        require((_lastAction[msg.sender] + 1 minutes) <= block.timestamp, "WAIT_60_MIN");  //----!! testnet: 1min // mainnet: 60 min
         require((_depositedTokens[msg.sender] + amount) <= maxDeposit,"MAX_DEPOSIT_1250000");
 
         if (_calculateReward(msg.sender)) {
@@ -181,8 +158,6 @@ contract depositor {
 
     function _calculateReward(address account) internal returns (bool reward) {
         if (_depositedTokens[account] > 0) {
-            // reward is: (rewardPerTokenCurrent - rewardPerTokenAtStakeBegin) * tokensStaked
-            // divide by the introduced multiplier here
             uint256 out = ((totalRewardPerToken - _rewardAtDeposit[account]) * _depositedTokens[account]) / 1e30;
             _missedPayout[account] += out;
 
@@ -199,7 +174,7 @@ contract depositor {
     function claim() public {
         require(tokenSet, "DEPOSIT_NOT_ACTIVE");
         require(_calculateReward(msg.sender), "ACCUMULATE_0.005ETH");
-        require((_lastAction[msg.sender] + 10 minutes) <= block.timestamp, "WAIT_10_MIN");
+        require((_lastAction[msg.sender] + 1 minutes) <= block.timestamp, "WAIT_60_MIN"); //----!! testnet: 1min // mainnet: 60 min
         _lastAction[msg.sender] = block.timestamp;
 
         _claim(msg.sender);
@@ -218,7 +193,7 @@ contract depositor {
         require(tokenSet, "DEPOSIT_NOT_ACTIVE");
         require(amount > 0, "NO_0_WITHDRAW");
         require(amount <= _depositedTokens[msg.sender], "TOO_MUCH_REQUESTED");
-        require((_lastAction[msg.sender] + 10 minutes) <= block.timestamp, "WAIT_10_MIN");
+        require((_lastAction[msg.sender] + 1 minutes) <= block.timestamp, "WAIT_60_MIN"); //----!! testnet: 1min // mainnet: 60 min
 
         if (_calculateReward(msg.sender)) {
             _claim(msg.sender);
@@ -266,13 +241,13 @@ contract depositor {
         uint256 required = 0.025 * 10 ** 18;
         // @dev this lowers/highers the amount if certain USD/ETH is reached.
         if (eTP >= 6.9 * 10 ** 18) {
-            require(msg.value >= (0.015 * (10 ** 18) * multiplierNoEth), "FEE_TOO_LOW");
+            require(msg.value >= (0.0015 * (10 ** 18) * multiplierNoEth), "FEE_TOO_LOW");
         } else if (eTP >= 4.2 * 10 ** 18) {
-            require(msg.value >= (0.01 * (10 ** 18) * multiplierNoEth), "FEE_TOO_LOW");
+            require(msg.value >= (0.001 * (10 ** 18) * multiplierNoEth), "FEE_TOO_LOW");
         } else if (eTP >= 2.1 * 10 ** 18) {
-            require(msg.value >= (0.005 * (10 ** 18) * multiplierNoEth), "FEE_TOO_LOW");
+            require(msg.value >= (0.0005 * (10 ** 18) * multiplierNoEth), "FEE_TOO_LOW");
         } else {
-            require(msg.value >= (0.015 * (10 ** 18) * multiplierNoEth), "FEE_TOO_LOW");
+            require(msg.value >= (0.0015 * (10 ** 18) * multiplierNoEth), "FEE_TOO_LOW");
         }
 
         _tokenAddress = address(new LFGClubTokenNoCurve(name, symbol, _totalSupply, decimals));

@@ -35,32 +35,8 @@
  *
  */
 
-// SPDX-License-Identifier: MIT
-/**
- * This code is licensed under the MIT License *with the following exception*:
- *
- * Any use of this code — including modified versions — on a non-testnet network must send
- * 15% of all fee revenue, denominated in the native coin of the respective chain (e.g., ETH
- * on Base, ETH on Arbitrum, BNB on BNB Smart Chain), to the original author at:
- *
- * Address: 0xYourAddress
- *
- * This address can be configured in FeeAccount.sol as the `alwaysInShare` address,
- * which will handle the revenue sharing automatically.
- *
- * Deployments of this code on chains where the original author has already deployed
- * the protocol must not set buy/sell fees or Uniswap/Pancakeswap migration fees
- * below those set by the original deployment on that chain.
- *
- * On chains where the original author has not yet deployed the protocol, any deployment
- * must not set fees lower than 0.25% on buy/sell actions or DEX migration features.
- *
- * The first deployments by the original author are on: Ethereum Mainnet, Base, Arbitrum,
- * Unichain, and BNB Smart Chain.
- *
- * Failure to comply with these requirements voids the license.
- */
-
+// SPDX-License-Identifier: LicenseRef-LFG-Commercial
+// Full licence: https://github.com/lfgclub/lfgclub/blob/main/LICENSE
 pragma solidity ^0.8.20;
 
 import "./standardERC20.sol";
@@ -138,8 +114,8 @@ contract ThePool {
     uint256 startVETH;
     uint256 initVirtualTokens;
 
-    uint64 tokenMultiplier0 = 49044814340589;
-    uint48 tokenMultiplier1 = 4000000000000;
+    uint64 tokenMultiplier0 = 12261203585147251;
+    uint48 tokenMultiplier1 = 100000000000000;
 
     uint256 minimumTokens;
     uint256 minimumTokensTransfer;
@@ -359,27 +335,19 @@ contract ThePool {
 
     function _updateRequirements(uint256 priceETH) public onlyFeeOwner {
         if (priceETH < 3450) {
-            tokenMultiplier0 = 49044814340589;
-            tokenMultiplier1 = 4000000000000;
-            ethToPool = 6.9 * 10 ** 18;
-            // this needs to be saved in the bonding curve to not interfere with already launched ones...
+            tokenMultiplier0 = 12261203585147251;
+            tokenMultiplier1 = 100000000000000;
+            ethToPool = 0.69 * 10 ** 18; //testnet
         } else if ((priceETH >= 3450) && (priceETH < 6900)) {
-            tokenMultiplier0 = 1259469696969697;
-            tokenMultiplier1 = 62500000000000;
-            ethToPool = 4.2 * 10 ** 18;
+            tokenMultiplier0 = 829090909090909;
+            tokenMultiplier1 = 4000000000000;
+            ethToPool = 0.42 * 10 ** 18; // testnet
         } else {
-            tokenMultiplier0 = 8060606060606061; // uint96
-            tokenMultiplier1 = 200000000000000; // uint64
-            ethToPool = 2.1 * 10 ** 18; // uint96
+            tokenMultiplier0 = 829090909090909; // uint96
+            tokenMultiplier1 = 2000000000000; // uint64
+            ethToPool = 0.21 * 10 ** 18; // testnet
         }
     }
-
-    /*
-            ethToPool = 6.9 * 10 ** 18;
-            ethToPool = 4.2 * 10 ** 18;
-            ethToPool = 2.1 * 10 ** 18; // uint96
-
-    */
 
     // @dev    Factory will call this function to set also the staking address here.
     function _setDepositor() external {

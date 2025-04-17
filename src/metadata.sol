@@ -36,8 +36,8 @@ library Metadata {
     }
 
     function calculateHash(uint256 nmbr, string[7] memory input) public pure returns (bytes32 hash) {
-        string memory temp = combineInputs(input[0], input[1], input[2], input[0], input[1], input[2], input[3], nmbr);
-        hash = keccak256(abi.encode(temp));
+        string memory tempVal = combineInputs(input[0], input[1], input[2], input[0], input[1], input[2], input[3], nmbr);
+        hash = keccak256(abi.encode(tempVal));
     }
 
     function uintToString(uint256 value) internal pure returns (string memory) {

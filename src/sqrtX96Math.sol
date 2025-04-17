@@ -9,8 +9,8 @@ library SqrtX96Math {
 
     // @dev    Calculation of the square rote price * 2^96
     function getSqrtPriceX96(uint256 amount0, uint256 amount1, uint8 decimals0, uint8 decimals1) public pure returns (uint160) {
-        require(amount0 > 0, "Error: amount0 must be > 0");
-        require(amount1 > 0, "Error: amount1 must be > 0");
+        require(amount0 > 0, "Error: amount0 must be over 0");
+        require(amount1 > 0, "Error: amount1 must be over 0");
 
         // @dev    We normalize the amounts with 1e15 to prevent overflows.
         uint256 amount00 = amount0 / 1e15;
@@ -35,27 +35,6 @@ library SqrtX96Math {
             c = 1;
         }
     }
-
-    /*
-        // 2500 pool = 3500 pool - ticks: 50 // 70  : 4299855742
-        // 3000 pool = 4500 pool - ticks: 60 // 90  : 4306310043
-        // 4000 pool = 5000 pool - ticks: 80 // 100 : 4310618291
-        (uint160 sqrtPriceAX96, uint160 sqrtPriceBX96) = SqrtX96Math.getSqrtX96ForMinMaxTicks(887200);
-
-        uint160 sqrtPriceAX96 = 4310618291;
-        // @dev    fixed value of SqrtX96 of upper tick on a 5000 pool
-        // 2500 pool = 3500 pool - ticks: 50 // 70  : 1459840076217215014784942191280287875428834607104
-        // 3000 pool = 4500 pool - ticks: 60 // 90  : 1457652066918736003311195112902404148109990952960
-        // 4000 pool = 5000 pool - ticks: 80 // 100 : 1456195216239875923660968522684675790921166487552
-        uint160 sqrtPriceBX96 = 1456195216239875923660968522684675790921166487552;
-
-                // 50 -> 887250
-        // 60 -> 887220
-        // 70 -> 887250
-        // 80 -> 887200
-        // 90 -> 887220
-        // 100 -> 887200
-    */
 
     // @dev    see https://github.com/Uniswap/v4-core/blob/main/src/libraries/TickMath.sol
     // @dev    Calculated directly to make it easier for us.

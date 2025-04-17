@@ -200,7 +200,7 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
 
 // @dev   Added for LFG.CLUB
 contract LFGClubToken is ERC20 {
-    constructor(string memory name, string memory symbol, bytes32 metaHash, address factory, uint256 tokenID)
-    ERC20(name, symbol, metaHash, factory, tokenID) {
+    constructor(string memory name, string memory symbol, bytes32 metaHash, address factory, uint256 _tokenID)
+    ERC20(name, symbol, metaHash, factory, _tokenID) {
     }
 }
