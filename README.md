@@ -7,7 +7,7 @@ The migrate values in here are set for ethereum sepolia testnet deployments. Als
 Before launching change the Uniswap addresses and WETH9 addresses to the desired chains, then:
 
 1. Launch Factory
-2. Launch Native with: "name", "symbol", "metadatahash", "factory_address", "tokenId"
+2. Launch Native (LFGClubToken) with: "name", "symbol", "metadatahash", "factory_address", "tokenId"
 3. Call setNative(nativeAddress) on Factory.
 4. Launch Depositor with the factory address as constructor.
 5. Call on Factory: setDepositor(depositorAddress).
