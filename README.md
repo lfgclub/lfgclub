@@ -1,6 +1,7 @@
 ## Hi there 👋
 
-The migrate values in here are set for ethereum sepolia testnet deployments. Also unlock times etc.
+The migrate values in here are set for ethereum sepolia testnet deployments. Also unlock times etc. For
+mainnet deployments you NEED to change them.
 
 # Instructions
 
