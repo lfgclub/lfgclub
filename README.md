@@ -8,15 +8,19 @@ mainnet deployments you NEED to change them.
 Before launching change the Uniswap addresses and WETH9 addresses to the desired chains, then:
 
 1. Launch Factory
-2. Launch Native (LFGClubToken) with: "name", "symbol", "metadatahash", "factory_address", "tokenId"
-3. Call setNative(nativeAddress) on Factory.
-4. Launch Depositor with the factory address as constructor.
-5. Call on Factory: setDepositor(depositorAddress).
-6. Approve feeOwner Contract for spending on native token
-7. Call addLiquidity on feeOwner Contract.
-8. Call on feeOwner modifySplitting if you want to split with depositors.
+2. Launch Pool Contract with factory as constructor argument
+3. Call setPoolAddress(poolAddress) on Factory.
+4. Launch Native (LFGClubToken) with: "name", "symbol", "metadatahash", "factory_address", "tokenId"
+5. Call setNative(nativeAddress) on Factory.
+6. Launch Depositor with the factory address as constructor.
+7. Call on Factory: setDepositor(depositorAddress).
+8. Approve feeOwner Contract for spending on native token
+9. Call addLiquidity on feeOwner Contract.
+10. Call on feeOwner modifySplitting if you want to split with depositors.
 
-You can skip 2 to 8 if you don't want a native token nor a depositor contract.
+You can skip 4 to 10 if you don't want a native token nor a depositor contract.
+
+Because of bytecode init restriction this needed to be splitted up like that.
 
 # License
 
