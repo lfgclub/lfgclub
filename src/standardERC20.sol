@@ -1,10 +1,11 @@
 /** Source code of this contract can be found on
  *  https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol
  *  Changes for LFG.CLUB are marked with "added".
+ *  Removed _msgData() and _contextSuffixLength()
  */
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.29;
 
 interface IERC20 {
     event Transfer(address indexed from, address indexed to, uint256 value);
@@ -41,14 +42,6 @@ abstract contract Context {
     function _msgSender() internal view virtual returns (address) {
         return msg.sender;
     }
-
-    function _msgData() internal view virtual returns (bytes calldata) {
-        return msg.data;
-    }
-
-    function _contextSuffixLength() internal view virtual returns (uint256) {
-        return 0;
-    }
 }
 
 abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
@@ -58,16 +51,16 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
 
     uint256 private _totalSupply;
 
-    bytes32 public metadataHash; // @dev   added
+    bytes32 public immutable metadataHash; // @dev   added
 
     string private _name;
     string private _symbol;
 
-    address public _factoryAddress; // @dev   added
+    address public immutable _factoryAddress; // @dev   added
 
-    uint256 public tokenID; // @dev   added
+    uint256 public immutable tokenID; // @dev   added
 
-    FactoryContract factory; // @dev   added
+    FactoryContract immutable factory; // @dev   added
 
     constructor(string memory name_, string memory symbol_, bytes32 metaHash_, address factoryAddress_, uint256 tokenID_) {
         _name = name_;

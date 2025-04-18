@@ -37,25 +37,26 @@
 
 // SPDX-License-Identifier: LicenseRef-LFG-Commercial
 // Full license: https://github.com/lfgclub/lfgclub/blob/main/LICENSE
+pragma solidity ^0.8.29;
 
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./pool.sol";
 import "./factoryERC20.sol";
 import "./standardERC20_nocurve.sol";
 
-contract depositor {
+contract depositor is ReentrancyGuard {
 
     uint256 public totalDeposited;
-    address public feeOwner;
-    address creator;
-    address public factory;
+    address public immutable feeOwner;
+    address immutable creator;
+    address public immutable factory;
 
     address public token;
 
     uint256 public splitAmount;
 
-    uint256 totalSupply = 1e27;
-    uint256 maxDeposit = totalSupply * 125 / 100000;
-    uint256 multiplierNoEth = 1;
+    uint256 constant totalSupply = 1e27;
+    uint256 immutable maxDeposit = totalSupply * 125 / 100000;
 
     bool tokenSet;
 
@@ -67,9 +68,7 @@ contract depositor {
     uint256 public totalDepositors;
     uint256 totalRewardPerToken;
 
-    uint256 poolContract;
-
-    address WETH;
+    address immutable WETH;
 
     modifier onlyFeeOwner() {
         require(feeOwner == msg.sender, "Caller is not the feeOwner");
@@ -114,7 +113,7 @@ contract depositor {
 
     // @dev    This function only exists to really double check that we set the right contract address.
     function setToken(address ca, address poolToken0) public onlyFeeOwner {
-        require(tokenSet == false, "TOKEN_SET");
+        require(!tokenSet, "TOKEN_SET");
         require(poolToken0 == ca, "POOL_TOKEN_DIFFERENT");
         token = ca;
         tokenSet = true;
@@ -129,7 +128,7 @@ contract depositor {
     }
 
     // @dev    Deposit function
-    function deposit(uint256 amount) public {
+    function deposit(uint256 amount) public nonReentrant {
         require(tokenSet, "DEPOSIT_NOT_ACTIVE");
         require(amount > 0, "NO_0_DEPOSIT");
         require(amount <= IWETH9(token).balanceOf(msg.sender), "NOT_ENOUGH_TOKENS");
@@ -140,9 +139,9 @@ contract depositor {
             _claim(msg.sender);
         }
 
-        IWETH9(token).transferFrom(msg.sender, address(this), amount);
+        require(IWETH9(token).transferFrom(msg.sender, address(this), amount));
 
-        totalDepositors += (_depositedTokens[msg.sender] == 0) ? 1 : 0; // here fail fix it
+        totalDepositors += (_depositedTokens[msg.sender] == 0) ? 1 : 0;
         _depositedTokens[msg.sender] += amount;
         totalDeposited += amount;
 
@@ -171,7 +170,7 @@ contract depositor {
     }
 
     // @dev    Claim function
-    function claim() public {
+    function claim() public nonReentrant {
         require(tokenSet, "DEPOSIT_NOT_ACTIVE");
         require(_calculateReward(msg.sender), "ACCUMULATE_0.005ETH");
         require((_lastAction[msg.sender] + 1 minutes) <= block.timestamp, "WAIT_60_MIN"); //----!! testnet: 1min // mainnet: 60 min
@@ -189,7 +188,7 @@ contract depositor {
     }
 
     // @dev    Withdraw function
-    function withdraw(uint256 amount) public {
+    function withdraw(uint256 amount) public nonReentrant {
         require(tokenSet, "DEPOSIT_NOT_ACTIVE");
         require(amount > 0, "NO_0_WITHDRAW");
         require(amount <= _depositedTokens[msg.sender], "TOO_MUCH_REQUESTED");
@@ -204,7 +203,7 @@ contract depositor {
 
         totalDepositors -= (amount == _depositedTokens[msg.sender]) ? 1 : 0;
 
-        IWETH9(token).transfer(msg.sender, amount);
+        require(IWETH9(token).transfer(msg.sender, amount));
 
         _lastAction[msg.sender] = block.timestamp;
     }
@@ -235,23 +234,22 @@ contract depositor {
     }
 
     // @dev    for toolbox: launch token without bonding curve
-    function launchToken(string memory name, string memory symbol, uint256 _totalSupply, uint8 decimals) public payable returns (address _tokenAddress) {
+    function launchToken(string memory name, string memory symbol, uint256 _totalSupply, uint8 decimals) public payable nonReentrant returns (address _tokenAddress) {
         address _poolAddress = Factory(factory)._poolAddress();
         uint256 eTP = ThePool(payable(_poolAddress)).ethToPool();
-        uint256 required = 0.025 * 10 ** 18;
         // @dev this lowers/highers the amount if certain USD/ETH is reached.
-        if (eTP >= 6.9 * 10 ** 18) {
-            require(msg.value >= (0.0015 * (10 ** 18) * multiplierNoEth), "FEE_TOO_LOW");
-        } else if (eTP >= 4.2 * 10 ** 18) {
-            require(msg.value >= (0.001 * (10 ** 18) * multiplierNoEth), "FEE_TOO_LOW");
-        } else if (eTP >= 2.1 * 10 ** 18) {
-            require(msg.value >= (0.0005 * (10 ** 18) * multiplierNoEth), "FEE_TOO_LOW");
+        if (eTP >= 0.69 * 10 ** 18) {
+            require(msg.value >= (0.0015 * (10 ** 18)), "FEE_TOO_LOW");
+        } else if (eTP >= 0.42 * 10 ** 18) {
+            require(msg.value >= (0.001 * (10 ** 18)), "FEE_TOO_LOW");
+        } else if (eTP >= 0.21 * 10 ** 18) {
+            require(msg.value >= (0.0005 * (10 ** 18)), "FEE_TOO_LOW");
         } else {
-            require(msg.value >= (0.0015 * (10 ** 18) * multiplierNoEth), "FEE_TOO_LOW");
+            require(msg.value >= (0.0015 * (10 ** 18)), "FEE_TOO_LOW");
         }
 
         _tokenAddress = address(new LFGClubTokenNoCurve(name, symbol, _totalSupply, decimals));
-        iERC20(_tokenAddress).transfer(msg.sender, _totalSupply * decimals);
+        require(iERC20(_tokenAddress).transfer(msg.sender, _totalSupply * decimals));
 
         _split(msg.value);
     }

@@ -37,7 +37,7 @@
 
 // SPDX-License-Identifier: LicenseRef-LFG-Commercial
 // Full license: https://github.com/lfgclub/lfgclub/blob/main/LICENSE
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.29;
 
 import "./standardERC20.sol";
 import "./pool.sol";
@@ -47,23 +47,18 @@ import "./metadata.sol";
 
 contract Factory {
     LFGClubToken public latestDeployedToken;
-    address public latestPool;
-    address public WETH9 = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
+    address public constant WETH9 = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
 
-    address public creator;
+    address public immutable creator;
 
     // @dev    Uniswap V3 Factory Address
-    address public _v3Factory = 0x0227628f3F023bb0B980b67D528571c95c6DaC1c;
+    address public constant _v3Factory = 0x0227628f3F023bb0B980b67D528571c95c6DaC1c;
     // @dev    Uniswap V3 NFT Manager Address
-    address public _v3positionManager = 0x1238536071E1c677A632429e3655c799b22cDA52;
+    address public constant _v3positionManager = 0x1238536071E1c677A632429e3655c799b22cDA52;
 
     uint256 public tokenID = 1;
 
-    uint256 multiplierNoEth = 1; // @dev    Change for chains where ETH is not the native coin, leave it 1 for ETH chains.
-
-    address public feeOwner;
-    address public migrator;
-    address public metadataAddress;
+    address public immutable feeOwner;
 
     address public _poolAddress;
     address public _depositAddress;
@@ -75,15 +70,13 @@ contract Factory {
 
     bool offline;
 
-    bool launchAsV4; 
-
     modifier onlyFeeOwner() {
-        require(feeOwner == msg.sender, "Ownable: caller is not the owner");
+        require(feeOwner == msg.sender, "NOT_OWNER");
         _;
     }
 
     modifier onlyCreator() {
-        require(creator == msg.sender, "Ownable: caller is not the owner");
+        require(creator == msg.sender, "NOT_CREATOR");
         _;
     }
 
@@ -102,25 +95,19 @@ contract Factory {
     constructor() {
         feeOwner = address(new FeeCollector(address(this), msg.sender, WETH9, _v3Factory, _v3positionManager));
         offline = false;
-        launchAsV4 = true;
         creator = msg.sender;
+    }
 
-        _poolAddress = address(new ThePool(feeOwner, address(this), launchAsV4, WETH9, _depositAddress));
+    // @dev    We need to deploy the pool contract seperately because of init bytecode restrictions.
+    // @dev    Set the poolAddress here.
+    function setPoolAddress(address pool) public onlyCreator {
+        require(_poolAddress == address(0), "POOL_ALREADY_SET");
+        _poolAddress = pool;
     }
 
     // @dev    We calculate the keccak256 hash here to generate a unique hash that is associated with the
     // @dev    initial parameters that are provided during token creation. This is done in order to
-    // @dev    make initial parameters fraud proof. But why do that if the ipfs base58 hash can also
-    // @dev    be used for the unique information?
-    // @dev    Because an ipfs link could be unpinned, or if token creation is not done via our
-    // @dev    webpage it is possible to feed the function with a bogus hash that leads to an invalid
-    // @dev    ipfs link.
-
-    // @dev    We are actually planning on storing the initial metadata onchain but we are still
-    // @dev    researching new compression mechanisms for on chain storage without needing to rely 
-    // @dev    on an off-chain solution. Storing strings is very expensive after all.
-    // @dev    For the moment the implemented functions will not work as the metadata contract is
-    // @dev    not deployed.
+    // @dev    make initial parameters fraud proof.
     function calculateHash(uint256 id, string[7] memory _meta) internal pure returns (bytes32) {
         return Metadata.calculateHash(id, _meta);
     }
@@ -153,19 +140,22 @@ contract Factory {
     // @dev    0.25 ETH or 1 BNB. The cost is that high to deter bots / scammers from abusing it. This will happen
     // @dev    automatically without oversight. We can enforce higher values if called via website.
     // @dev    feeOwner can update Metadata for free (use this if there are some shenanigans...).
+
     function _updateMetadata(uint256 id, string[5] memory metad) public payable {
-        (address crtr, , , , , , , , , , , , , , , ) = ThePool(payable(_poolAddress)).getBondingCurve(id);
+        ThePool.BondingCurve memory bc = ThePool(payable(_poolAddress)).getBondingCurve(id);
+
+        address crtr = bc.creator;
         uint256 eTP = ThePool(payable(_poolAddress)).ethToPool();
         uint256 required = 0.005 * 10 ** 18;
         // @dev this lowers/highers the amount if certain USD/ETH is reached.
-        if (eTP >= 6.9 * 10 ** 18) {
-            required = 0.005 * (10 ** 18) * multiplierNoEth;            
-        } else if (eTP >= 4.2 * 10 ** 18) {
-            required = 0.003 * (10 ** 18) * multiplierNoEth;              
-        } else if (eTP >= 2.1 * 10 ** 18) {
-            required = 0.002 * (10 ** 18) * multiplierNoEth;
+        if (eTP >= 0.69 * 10 ** 18) {
+            required = 0.005 * (10 ** 18);            
+        } else if (eTP >= 0.42 * 10 ** 18) {
+            required = 0.003 * (10 ** 18);              
+        } else if (eTP >= 0.21 * 10 ** 18) {
+            required = 0.002 * (10 ** 18);
         } else {
-            required = 0.005 * (10 ** 18) * multiplierNoEth;            
+            required = 0.005 * (10 ** 18);            
         }
         // @dev   Token creator
         if (msg.sender == crtr) {
@@ -200,35 +190,30 @@ contract Factory {
 
     // @dev    Create Token function.
     function createToken(string memory name, string memory symbol, string[5] memory metad) public payable returns (uint256 id) {
-        require(offline == false,"New creation of tokens is deactivated. Old tokens can be traded normally. Please visit the website for more info.");
+        require(!offline,"DEACTIVATED");
 
-        bytes32 tempHash = calculateHash(tokenID, [name, symbol, metad[0], metad[1], metad[2], metad[3], metad[4]]);
+        tokenID += 1;
+        id = tokenID-1;
 
-        latestDeployedToken = new LFGClubToken(name, symbol, tempHash, address(this), tokenID);
+        bytes32 tempHash = calculateHash(id, [name, symbol, metad[0], metad[1], metad[2], metad[3], metad[4]]);
+
+        latestDeployedToken = new LFGClubToken(name, symbol, tempHash, address(this), id);
         address _token = address(latestDeployedToken);
 
-        _tokenAddress[tokenID].tokenAddress = address(_token);
-        _tokenAddress[tokenID].creationBlock = uint48(block.number);
+        _tokenAddress[id].tokenAddress = address(_token);
+        _tokenAddress[id].creationBlock = uint48(block.number);
 
-        ThePool(payable(_poolAddress)).create(tokenID, msg.sender, _token);
+        ThePool(payable(_poolAddress)).create(id, msg.sender, _token);
 
-        emit CreateToken(tempHash, _token, tokenID, name, symbol, metad[0], metad[1], metad[2], metad[3], metad[4]);
+        emit CreateToken(tempHash, _token, id, name, symbol, metad[0], metad[1], metad[2], metad[3], metad[4]);
 
         if (msg.value > 0) {
-            ThePool(payable(_poolAddress)).buy{value: msg.value}(tokenID, 0);    
+            ThePool(payable(_poolAddress)).buy{value: msg.value}(id, 0);    
         }
-
-        id = tokenID;
-        tokenID += 1;
     }
 
     function update(bool flag) public onlyFeeOwner {
         offline = flag;
-    }
-
-    function launchPoolAsV4(bool flag) public onlyFeeOwner {
-        launchAsV4 = flag;
-        ThePool(payable(_poolAddress))._setV4launch(flag);
     }
 
     function getLatestTokenAddress() public view returns (address) {
@@ -248,7 +233,7 @@ contract Factory {
         bytes32 tempHash = calculateHash(0, [nm, sy, metad[0], metad[1], metad[2], metad[3], metad[4]]);
 
         emit CreateToken(tempHash, _address, 0, nm, sy, metad[0], metad[1], metad[2], metad[3], metad[4]);        
-        if (block.chainid == 11155111) { // change to mainnet
+        if (block.chainid == 1) { // change to mainnet
             require(ERC20(_nativeAddress)._factoryAddress() == address(this),"NATIVE_INCORRECT_FACTORY");
         }
     }

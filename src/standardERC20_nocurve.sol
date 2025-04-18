@@ -1,9 +1,10 @@
 /** Source code of this contract can be found on
   * https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol
+  * Removed _msgData() and _contextSuffixLength()
   */
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.29;
 
 interface iERC20 {
     event Transfer(address indexed from, address indexed to, uint256 value);
@@ -35,14 +36,6 @@ abstract contract iContext {
     function _msgSender() internal view virtual returns (address) {
         return msg.sender;
     }
-
-    function _msgData() internal view virtual returns (bytes calldata) {
-        return msg.data;
-    }
-
-    function _contextSuffixLength() internal view virtual returns (uint256) {
-        return 0;
-    }
 }
 
 abstract contract lERC20 is iContext, iERC20, iERC20Metadata, iERC20Errors {
@@ -51,7 +44,7 @@ abstract contract lERC20 is iContext, iERC20, iERC20Metadata, iERC20Errors {
     mapping(address account => mapping(address spender => uint256)) private _allowances;
 
     uint256 private _totalSupply;
-    uint8 private _decimals;
+    uint8 private immutable _decimals; /*changed*/
 
     string private _name;
     string private _symbol;

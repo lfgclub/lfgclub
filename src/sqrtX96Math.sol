@@ -8,7 +8,7 @@ library SqrtX96Math {
     uint256 internal constant Q96 = 0x1000000000000000000000000;
 
     // @dev    Calculation of the square rote price * 2^96
-    function getSqrtPriceX96(uint256 amount0, uint256 amount1, uint8 decimals0, uint8 decimals1) public pure returns (uint160) {
+    function getSqrtPriceX96(uint256 amount0, uint256 amount1) public pure returns (uint160) {
         require(amount0 > 0, "Error: amount0 must be over 0");
         require(amount1 > 0, "Error: amount1 must be over 0");
 

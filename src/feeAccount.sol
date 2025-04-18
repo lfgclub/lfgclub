@@ -37,8 +37,9 @@
 
 // SPDX-License-Identifier: LicenseRef-LFG-Commercial
 // Full license: https://github.com/lfgclub/lfgclub/blob/main/LICENSE
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.29;
 
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./standardERC20.sol";
 import "./factoryERC20.sol";
 import "./pool.sol";
@@ -46,10 +47,10 @@ import "./FullMath.sol";
 import "./sqrtX96Math.sol";
 import "./depositContract.sol";
 
-contract FeeCollector {
+contract FeeCollector is ReentrancyGuard {
 
     address public feeOwner;
-    address public factoryAddress;
+    address public immutable factoryAddress;
     address public specialAddress;
 
     uint256 public lastChangeAuthorization;
@@ -76,16 +77,17 @@ contract FeeCollector {
     uint256 public uniV3ID;
     address uniV3pool;
 
-    address public WETH;
+    address public immutable WETH;
     address nativeToken;
 
     uint256 lastETHChange;
+    uint256 setLastOwnerChange;
 
     // @dev    As this contract is open source but with a modified license, 
     // @dev    usage and modification of this contract is only allowed if
     // @dev    at least 15% of all fees are forwarded to the contract creator.
     // @dev    Here the address is set.
-    address alwaysInShare = 0x5C18eec0B15B962DAd08a4d2CBAF7C66eE98b93c;
+    address constant alwaysInShare = 0x5C18eec0B15B962DAd08a4d2CBAF7C66eE98b93c;
 
     uint256 setFeeLast;
     uint256 setSplitLast;
@@ -97,10 +99,10 @@ contract FeeCollector {
     event TokensUnlocked(address indexed token, uint256 amount);
     event LockChange(address indexed token, uint256 amount, uint256 unlockTime, address newOwner); 
 
-    Iv3Factory v3Factory;
-    INonfungiblePositionManager v3positionManager;
+    Iv3Factory immutable v3Factory;
+    INonfungiblePositionManager immutable v3positionManager;
 
-    address v3posm;
+    address immutable v3posm;
 
     bool v3added;
 
@@ -116,23 +118,24 @@ contract FeeCollector {
         v3posm = v3manager_;
         v3Factory = Iv3Factory(v3factory_);
         v3positionManager = INonfungiblePositionManager(v3manager_);
+        setLastOwnerChange = block.timestamp;
     }
 
     receive() external payable {}
     fallback() external payable {}
 
     modifier onlyFeeOwner() {
-        require(feeOwner == msg.sender, "Ownable: caller is not the owner");
+        require(feeOwner == msg.sender, "NOT_OWNER");
         _;
     }
 
     modifier isInAuthorizedShare() {
-        require(authorized[msg.sender] == true, "Caller is not authorized.");     
+        require(authorized[msg.sender], "NO_AUTH");     
         _;   
     }
 
     modifier isSpecialAddress() {
-        require(specialAddress == msg.sender, "Caller is not authorized.");     
+        require(specialAddress == msg.sender, "NO_AUTH");     
         _;   
     }
 
@@ -157,8 +160,8 @@ contract FeeCollector {
     // @dev    This locks the token this contract receives during migration.
     // @dev    50% for 2.5 min on testnet, and 183 days on mainnet
     // @dev    50% for 10 min on testnet, and 366 days on mainnet
-    function lockTokens(address token, uint256 tokenID) external {
-        require(msg.sender == payable(Factory(factoryAddress)._poolAddress()),"Caller is not pool contract.");
+    function lockTokens(address token) external {
+        require(msg.sender == payable(Factory(factoryAddress)._poolAddress()),"NOT_POOL");
         uint256 tokenBalance = ERC20(token).balanceOf(address(this));
         uint256 half = tokenBalance/2;
 
@@ -173,6 +176,13 @@ contract FeeCollector {
         emit TokensLocked(token, tokenBalance - half, block.timestamp + unlockTime2);
     }
 
+    // @dev    Changes feeOwner Address. Cannot be called for 6 months after launch and after every change.
+    function changeFeeOwner(address newOwner) public onlyFeeOwner {
+        require((setLastOwnerChange + 6 minutes) <= block.timestamp, "WAIT_180_DAYS"); //---!! testnet 6 min // main: 180 days
+        feeOwner = newOwner;
+        setLastOwnerChange = block.timestamp;
+    }
+
     // @dev    Unlocks tokens this contract received during migration to make them available for withdraw.
     function unlockTokens(address token) external isInAuthorizedShare {
         uint256 totalWithdrawable = 0;
@@ -185,39 +195,30 @@ contract FeeCollector {
             }
         }
 
-        require(totalWithdrawable > 0, "No tokens available for unlock.");
+        require(totalWithdrawable > 0, "0_AVAILABLE");
         lockedTokensTotal[token] -= totalWithdrawable;
         emit TokensUnlocked(token, totalWithdrawable);
     }
 
-    /*
-    -----    -----    -----    -----    -----    -----    -----    -----
-    -----    -----    -----    -----    -----    -----    -----    -----
-    -----    -----    -----    -----    -----    -----    -----    -----
-
-    LOCK FUNCTIONS FOR THE NATIVE TOKEN
-
-    -----    -----    -----    -----    -----    -----    -----    -----
-    -----    -----    -----    -----    -----    -----    -----    -----
-    -----    -----    -----    -----    -----    -----    -----    -----
-    */
+    /**
+     * LOCK FUNCTIONS FOR THE NATIVE TOKEN
+     */
 
     // lock native token; this is apart from the lock function to not confuse the different locks.
-    // Basically this could lock every erc20 token.
     function lockTokensNative(address token, uint256 amount, uint256 unlockTime, bool holder) public onlyFeeOwner {
         require(nativeToken != address(0), "NATIVE_NOT_SET");
 
         if (holder) {
             // contract holds tokens already. Check it if it is true.
             uint256 tokenBalance = ERC20(token).balanceOf(address(this));
-            require(amount <= tokenBalance,"Error: Amount cannot be higher than balance of tokens in this contract.");
+            require(amount <= tokenBalance,"AMOUNT>BALANCE");
         } else {
             // msg.sender holds tokens. Check if it is true.
             uint256 tokenBalance = ERC20(token).balanceOf(msg.sender);
-            require(amount <= tokenBalance,"Error: Amount cannot be higher than your token balance.");
+            require(amount <= tokenBalance,"AMOUNT>BALANCE");
 
             // needs to be approved obviously
-            IWETH9(token).transferFrom(msg.sender, address(this), amount);
+            require(IWETH9(token).transferFrom(msg.sender, address(this), amount));
         }
 
         nativeLocks[token].push(LockNativeInfo(amount, block.timestamp + unlockTime, msg.sender));
@@ -229,8 +230,8 @@ contract FeeCollector {
     // transfer ownership of lock
     function transferNativeLock(address token, address target, uint256 lockId) external {
         require(nativeToken != address(0), "NATIVE_NOT_SET");
-        require(nativeLocks[token][lockId].amount > 0, "Error: Tokens of this lockID are already withdrawn or lockID does not exist.");
-        require(nativeLocks[token][lockId].tokenOwner == msg.sender, "Error: Owner of this token lockID is not the caller.");
+        require(nativeLocks[token][lockId].amount > 0, "NOT_EXIST");
+        require(nativeLocks[token][lockId].tokenOwner == msg.sender, "NOT_OWNER");
 
         nativeLocks[token][lockId].tokenOwner = target;
 
@@ -240,9 +241,9 @@ contract FeeCollector {
     // extend lock
     function extendNativeLock(address token, uint256 newUnlockTime, uint256 lockId) external {
         require(nativeToken != address(0), "NATIVE_NOT_SET");
-        require(nativeLocks[token][lockId].amount > 0, "Error: Tokens of this lockID are already withdrawn or lockID does not exist.");
-        require(nativeLocks[token][lockId].tokenOwner == msg.sender, "Error: Owner of this token lockID is not the caller.");
-        require(nativeLocks[token][lockId].unlockTime < (block.timestamp + newUnlockTime), "Error: New unlock time of token lockID needs to be higher than current unlock time.");
+        require(nativeLocks[token][lockId].amount > 0, "NOT_EXIST");
+        require(nativeLocks[token][lockId].tokenOwner == msg.sender, "NOT_OWNER");
+        require(nativeLocks[token][lockId].unlockTime < (block.timestamp + newUnlockTime), "OLD>NEW");
 
         nativeLocks[token][lockId].unlockTime = block.timestamp + newUnlockTime;
 
@@ -262,7 +263,7 @@ contract FeeCollector {
             }
         }
 
-        require(totalWithdrawable > 0, "Error: No tokens available for unlock.");
+        require(totalWithdrawable > 0, "0_AVAILABLE");
         lockedTokensTotal[token] -= totalWithdrawable;
         emit TokensUnlocked(token, totalWithdrawable);
     }        
@@ -280,7 +281,7 @@ contract FeeCollector {
         address token = nativeToken;
         
         uint256 tokenBalance = ERC20(token).balanceOf(address(this));
-        require(tokenBalance > 0,"No Token balance.");
+        require(tokenBalance > 0,"NO_BALANCE");
 
         // check if some of the tokens are locked
 
@@ -288,7 +289,7 @@ contract FeeCollector {
             uint256 lockedBalance = lockedNativeTokensTotal[token];
 
             tokenBalance -= lockedBalance;
-            require(tokenBalance > 0, "No unlocked tokens.");
+            require(tokenBalance > 0, "0_AVAILABLE");
         }
 
         // calculate how much % is burned
@@ -301,17 +302,19 @@ contract FeeCollector {
             uint256 burnAmount = FullMath.mulDiv(shareAmount, burnRatio, 1e35);
             // Authorized recipients receive the remainder
             uint256 authorizedAmount = shareAmount - burnAmount;
-            ERC20(token).transfer(authorizedArray[i], authorizedAmount);
-            ERC20(token).transfer(0x000000000000000000000000000000000000dEaD, burnAmount);
+            require(ERC20(token).transfer(authorizedArray[i], authorizedAmount));
+            require(ERC20(token).transfer(0x000000000000000000000000000000000000dEaD, burnAmount));
         } 
     }
 
     // @dev    Withdraws the collected ETH, split up between the share holders.
     function withdrawETH() public isInAuthorizedShare {
         uint256 balanceContract = address(this).balance;
-        require(balanceContract > 0,"No ETH balance.");
+        require(balanceContract > 0,"0_ETH");
 
-        for (uint256 i = 0; i < authorizedArray.length; i++) {
+        uint256 theLength = authorizedArray.length;
+
+        for (uint256 i = 0; i < theLength; i++) {
             uint256 amount = FullMath.mulDiv(balanceContract,shareArray[i],10000);
             payable(authorizedArray[i]).transfer(amount);
         }        
@@ -320,9 +323,9 @@ contract FeeCollector {
 
     // @dev    Withdraws the collected token <tokenContract>, split up between the share holders.
     function withdrawTokens(address token) public isInAuthorizedShare {
-        require(token != nativeToken,"Wrong function for native.");
+        require(token != nativeToken,"WRONG");
         uint256 tokenBalance = ERC20(token).balanceOf(address(this));
-        require(tokenBalance > 0,"No Token balance.");
+        require(tokenBalance > 0,"0_TOKEN");
 
         // check if some of the tokens are locked
 
@@ -330,12 +333,12 @@ contract FeeCollector {
             uint256 lockedBalance = lockedTokensTotal[token];
 
             tokenBalance -= lockedBalance;
-            require(tokenBalance > 0, "No unlocked tokens.");
+            require(tokenBalance > 0, "0_AVAILABLE");
         }
 
         for (uint256 i = 0; i < authorizedArray.length; i++) {
             uint256 amount = FullMath.mulDiv(tokenBalance,shareArray[i],10000);
-            ERC20(token).transfer(authorizedArray[i], amount);
+            require(ERC20(token).transfer(authorizedArray[i], amount));
         }  
     }
 
@@ -344,10 +347,9 @@ contract FeeCollector {
     // @dev    Sum of share array must be exactly 10000.
     function changeAuthorization(address[] memory accounts, uint256[] memory shares) public onlyFeeOwner {
         // add that it can only be changed once weekly
-        require((lastChangeAuthorization + 10 minutes) < block.timestamp, "Change only allowed every 10 minutes."); //---!! testnet: 10 min // main: 1 week
-        // testnet: 10 min // mainnet: 2 weeks
-        //
-        require((accounts[0] == alwaysInShare) && (shares[0] >= 1500),"Contract creator needs to be in index 0 and over or equal 1500. Read license.");
+        require((lastChangeAuthorization + 10 minutes) < block.timestamp, "WAIT_1_WEEK"); //---!! testnet: 10 min // main: 1 week
+        
+        require((accounts[0] == alwaysInShare) && (shares[0] >= 1500),"READ_LICENSE");
         uint256 totalSum;
 
         // first check that sum of shares is not >10000 and clear the maps
@@ -355,10 +357,12 @@ contract FeeCollector {
             totalSum += shares[i];
         }
 
-        require(totalSum == 10000, "Error: Sum of shares need to be exactly 10000.");
+        require(totalSum == 10000, "SUM_NEED_10000");
+
+        uint256 theLength = authorizedArray.length;
 
         // first empty the mappings
-        for (uint256 i = 0; i < authorizedArray.length; i++) {
+        for (uint256 i = 0; i < theLength; i++) {
             authorized[authorizedArray[i]] = false;
         }
         // now clear the arrays
@@ -418,7 +422,8 @@ contract FeeCollector {
 
     // @dev    Sets that all new migrations to launch as Uniswap V4 pool.
     function launchPoolAsV4(bool flag) public onlyFeeOwner {
-        Factory(factoryAddress).launchPoolAsV4(flag);        
+        address pool = Factory(factoryAddress)._poolAddress();
+        ThePool(payable(pool)).launchPoolAsV4(flag);        
     }
 
     // @dev    Changes the order of which the v4 pools will be checked and launched.
@@ -469,14 +474,13 @@ contract FeeCollector {
     // @dev    Team decides what to do with the rest of the tokens,
     // @dev    e.g. adding permanently to liquidity, burning, covering
     // @dev    expenses etc.
-    function collect(uint256 tokenID) public isInAuthorizedShare {
+    function collect(uint256 tokenID) public isInAuthorizedShare nonReentrant {
         address pool = Factory(factoryAddress)._poolAddress();
 
         // @dev    token1 in bondingCurve is always WETH, so we only need token0.
 
-       // address theToken0 = address(0); //abi.decode(ThePool(payable(pool)).bondingCurve(tokenID, 0x01), (address));
-        ( , , , , address theToken0, , , , , , , , , , , ) = ThePool(payable(pool)).getBondingCurve(tokenID);
-        //address theToken0 = bC.token0;
+        ThePool.BondingCurve memory bc = ThePool(payable(pool)).getBondingCurve(tokenID);
+        address theToken0 = bc.token0;
 
         uint256 beforeETH = address(this).balance;
         uint256 beforeToken = ERC20(theToken0).balanceOf(address(this));
@@ -502,7 +506,7 @@ contract FeeCollector {
                 uint256 splittedToken = FullMath.mulDiv(receivedTokens, splitAmt, 10000);
                 (bool success, ) = payable(depositAddress).call{value: splittedETH}("");
                 require(success, "TX_FAIL");
-                ERC20(theToken0).transfer(0x000000000000000000000000000000000000dEaD, splittedToken);
+                require(ERC20(theToken0).transfer(0x000000000000000000000000000000000000dEaD, splittedToken));
             }
         }
     }
@@ -522,8 +526,8 @@ contract FeeCollector {
     // @dev    ADD LIQUIDITY FUNCTION FOR THE NATIVE TOKEN FOR UNISWAP V3.
     // @dev    This locks liquidity as NFT is transferred directly to the contract.
     // @dev    Only function available is claim.
-    function addLiquidityNative(address token, uint256 amountToken) public payable onlyFeeOwner {
-        require(v3added == false, "Error: Native token pool has already been created.");
+    function addLiquidityNative(address token, uint256 amountToken) public payable nonReentrant onlyFeeOwner {
+        require(!v3added, "ALREADY_EXIST");
         nativeToken = token;
         address token00 = nativeToken;
         address token11 = WETH;
@@ -533,20 +537,20 @@ contract FeeCollector {
 
         IWETH9(WETH).deposit{value: reserve1}();
 
-        IWETH9(WETH).approve(v3posm, type(uint256).max);
+        require(IWETH9(WETH).approve(v3posm, type(uint256).max));
 
         // @dev    Native token must be transfered to this contract first -> as we use transferFrom the caller needs to approve the tokens first
         // @dev    to this contract!
-        IWETH9(token00).transferFrom(msg.sender, address(this), amountToken);
-        IWETH9(token00).approve(v3posm, type(uint256).max);
+        require(IWETH9(token00).transferFrom(msg.sender, address(this), amountToken));
+        require(IWETH9(token00).approve(v3posm, type(uint256).max));
 
         uniV3pool = v3Factory.createPool(token00, token11, 10000);
         address token0addr = Iv3Pool(uniV3pool).token0();
 
-        uint160 sqrtX = (token0addr != token11) ? SqrtX96Math.getSqrtPriceX96(reserve0, reserve1, 18, 18) : SqrtX96Math.getSqrtPriceX96(reserve1, reserve0, 18, 18);
+        uint160 sqrtX = (token0addr != token11) ? SqrtX96Math.getSqrtPriceX96(reserve0, reserve1) : SqrtX96Math.getSqrtPriceX96(reserve1, reserve0);
         Iv3Pool(uniV3pool).initialize(sqrtX);
 
-        (uint256 tokenId, uint128 liquidity, uint256 amount0Used, uint256 amount1Used) = v3positionManager.mint(
+        (uint256 tokenId, , , ) = v3positionManager.mint(
             INonfungiblePositionManager.MintParams({
                 token0: (token0addr != token11) ? token00 : token11,
                 token1: (token0addr != token11) ? token11 : token00,
@@ -574,8 +578,8 @@ contract FeeCollector {
     // @dev    75% of native token will be burned.
     // @dev    12.5% is transfered to feeOwner Contract and locked up for 6 months.
     // @dev    12.5% is transfered to feeOwner Contract and immediately available.
-    function claimNativeFee() public onlyFeeOwner {
-            require(v3added, "Error: Native token pool has not been created.");
+    function claimNativeFee() public nonReentrant onlyFeeOwner {
+            require(v3added, "NO_NATIVE");
             INonfungiblePositionManager.CollectParams memory params = INonfungiblePositionManager.CollectParams({
                     tokenId: uniV3ID,
                     recipient: address(this),
@@ -603,7 +607,7 @@ contract FeeCollector {
             uint256 lockAmount = FullMath.mulDiv(NativeAmount, 12500, 100000);
 
             // @dev    Burn
-            IWETH9(nativeToken).transfer(0x000000000000000000000000000000000000dEaD, lockAmount * 6);
+            require(IWETH9(nativeToken).transfer(0x000000000000000000000000000000000000dEaD, lockAmount * 6));
             // @dev    Lock
             lockTokensNative(nativeToken, lockAmount, 184 days, true); // lock
     }

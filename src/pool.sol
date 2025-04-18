@@ -37,8 +37,9 @@
 
 // SPDX-License-Identifier: LicenseRef-LFG-Commercial
 // Full license: https://github.com/lfgclub/lfgclub/blob/main/LICENSE
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.29;
 
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./standardERC20.sol";
 import "./FullMath.sol";
 import "./feeAccount.sol";
@@ -110,50 +111,50 @@ interface Iv2Router {
 }
 
 ////////// Start of contract
-contract ThePool {
-    uint256 startVETH;
-    uint256 initVirtualTokens;
+contract ThePool is ReentrancyGuard {
+    uint256 immutable startVETH;
+    uint256 immutable initVirtualTokens;
 
     uint64 tokenMultiplier0 = 12261203585147251;
     uint48 tokenMultiplier1 = 100000000000000;
 
-    uint256 minimumTokens;
-    uint256 minimumTokensTransfer;
+    uint256 immutable minimumTokens;
+    uint256 immutable minimumTokensTransfer;
 
     address token0addr;
     uint80 public ethToPool;
 
-    address feeOwner;
+    address immutable feeOwner;
     uint256 public feeOnCurve = 100; /*in bps: 100=1%, 1=0.01% etc.*/
 
-    address factory;
-    address WETH;
+    address immutable factory;
+    address public immutable WETH;
 
     // @dev    Uniswap V3 Factory Address
-    address public _v3Factory = 0x0227628f3F023bb0B980b67D528571c95c6DaC1c;
+    address public immutable _v3Factory;
     // @dev    Uniswap V3 NFT Manager Address
-    address public _v3positionManager = 0x1238536071E1c677A632429e3655c799b22cDA52;
+    address public immutable _v3positionManager;
     // @dev    Uniswap V3/V4 Permit2 Address
-    address uniPermit2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+    address public constant uniPermit2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
 
     // @dev    Uniswap V2 Router Address
-    address _v2router = 0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3;
+    address public constant _v2router = 0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3;
     // @dev    Uniswap V2 Factory Address
-    address _v2Factory = 0xF62c03E08ada871A0bEb309762E260a7a6a880E6;
+    address public constant _v2Factory = 0xF62c03E08ada871A0bEb309762E260a7a6a880E6;
 
     // @dev    Uniswap V4 Pool Manager Address
-    address public immutable uniswapV4Manager = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
+    address public constant uniswapV4Manager = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
     // @dev    Uniswap V4 Position Manager Address
-    address v4POSM = 0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4;
+    address public constant v4POSM = 0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4;
     // @dev    Launching as V4?
     bool launchAsV4;
     uint24 v4launcher;
 
-    Iv3Factory v3Factory;
-    INonfungiblePositionManager v3positionManager;
+    Iv3Factory immutable v3Factory;
+    INonfungiblePositionManager immutable v3positionManager;
 
-    Iv2Factory v2Factory;
-    Iv2Router v2router;
+    Iv2Factory immutable v2Factory;
+    Iv2Router immutable v2router;
 
     address depositAccount;
 
@@ -201,7 +202,7 @@ contract ThePool {
         // > 32B (1 slot)
     } // only 5 storage slots used
 
-    mapping(uint256 _tokenId => BondingCurve) public getBondingCurve;
+    mapping(uint256 _tokenId => BondingCurve) internal _bondingCurve;
     mapping(uint256 _tokenId => uint48[]) public swapBlocks;
 
     event Swap(
@@ -230,21 +231,23 @@ contract ThePool {
 
     // @dev    Modifier for functions that only the FeeOwner Contract can call 
     modifier onlyFeeOwner() {
-        require(feeOwner == msg.sender, "Ownable: caller is not the owner");
+        require(feeOwner == msg.sender, "NOT_OWNER");
         _;
     }
 
-    constructor(address _feeOwner, address _factory, bool _launchAsV4, address _WETH, address _depositor) {
+    constructor(address _factory) {
         initVirtualTokens = 1073000000 * 10 ** 18;
         minimumTokens = 202000000 * 10 ** 18;
         minimumTokensTransfer = 200000000 * 10 ** 18;
         startVETH = 30 * 10 ** 18;
         ethToPool = 0.69 * 10 ** 18;
 
-        feeOwner = _feeOwner;
         factory = _factory;
 
-        launchAsV4 = true;//_launchAsV4;
+        launchAsV4 = true;
+
+        _v3Factory = Factory(factory)._v3Factory();
+        _v3positionManager = Factory(factory)._v3positionManager();
 
         v3Factory = Iv3Factory(_v3Factory);
         v3positionManager = INonfungiblePositionManager(_v3positionManager);
@@ -252,9 +255,9 @@ contract ThePool {
         v2Factory = Iv2Factory(_v2Factory);
         v2router = Iv2Router(_v2router);
 
-        WETH = _WETH;
+        feeOwner = Factory(factory).feeOwner();
 
-        depositAccount = _depositor;
+        WETH = Factory(factory).WETH9();
 
         // @dev   Set Uniswap V3/V4 tick and fee levels
         getTicks[2500] = 50; getMaxTicks[2500] = 887250;
@@ -269,11 +272,15 @@ contract ThePool {
     receive() external payable {}
     fallback() external payable {}
 
+    function getBondingCurve(uint256 id) public view returns (BondingCurve memory) {
+        return _bondingCurve[id];
+    }
+
     // @dev    Creates the BondingCurve for the token.
     function create(uint256 id, address creator_, address token) external {
-        require(msg.sender == factory,"Error: Only callable by the factory contract.");
+        require(msg.sender == factory,"ONLY_FACTORY");
 
-        getBondingCurve[id] = BondingCurve({
+        _bondingCurve[id] = BondingCurve({
             creator: creator_,
             token0: token,
             token1: WETH,
@@ -287,19 +294,15 @@ contract ThePool {
             uniV4Id: 0,
             uniV3Id: 0,
             v2pool: false,
-            v4order: v4orderArray, // we can delete this and make other values the uint margin bigger
+            v4order: v4orderArray,
             tokenMul0: tokenMultiplier0,
             tokenMul1: tokenMultiplier1,
             ethPool: ethToPool
         });
     }
 
-    /*
-    cant force v4 launch... need to implement function
-    */
-
-    function _setV4launch(bool flag) external {
-        require(msg.sender == factory,"NOT_FACTORY");        
+    // @dev     Activate/Deactivate v4 launches for new pools
+    function launchPoolAsV4(bool flag) public onlyFeeOwner {
         launchAsV4 = flag;
     }
 
@@ -313,7 +316,7 @@ contract ThePool {
             return (length, new uint48[](0));
         }
 
-        require(end <= length && start < end, "Invalid range");
+        require(end <= length && start < end);
         blocks = new uint48[](end - start);
 
         for (uint256 i = 0; i < end - start; i++) {
@@ -345,7 +348,7 @@ contract ThePool {
         } else {
             tokenMultiplier0 = 829090909090909; // uint96
             tokenMultiplier1 = 2000000000000; // uint64
-            ethToPool = 0.21 * 10 ** 18; // testnet
+            ethToPool = 0.21 * 10 ** 18;
         }
     }
 
@@ -386,8 +389,8 @@ contract ThePool {
 
     // @dev    Function for buys. in UpdateReserves we get if pool is ready for migration,
     // @dev    if it is ready, then _migrate() is called.
-    function buy(uint256 id, uint256 amountOutMin) public payable returns (uint256 amountOut) {
-        BondingCurve storage bC = getBondingCurve[id];
+    function buy(uint256 id, uint256 amountOutMin) public payable nonReentrant {
+        BondingCurve storage bC = _bondingCurve[id];
         require(!bC.migrated,"POOL_MIGRATED");
         require(msg.value > 0, "0_ETH_ERROR");
 
@@ -397,7 +400,7 @@ contract ThePool {
         address sendTo = (msg.sender == factory) ? bC.creator : msg.sender;
         uint256 realAmountToken = updateReserves(id, 0, msg.value, false, sendTo);
         require(realAmountToken >= amountOutMin, "INSUFFICIENT_OUTPUT_AMOUNT");
-        IWETH9(bC.token0).transfer(sendTo, realAmountToken);
+        require(IWETH9(bC.token0).transfer(sendTo, realAmountToken));
 
         if (bC.migrated) {
             _migrate(id);
@@ -409,13 +412,13 @@ contract ThePool {
     // @dev    for users.
     // @dev    This is safe as the ERC20 Token transferFrom checks if the caller is
     // @dev    the pool contract. If it's not then allowance is needed.
-    function sell(uint256 id, uint256 amountIn, uint256 amountOutMin) public returns (uint256 amountOut) {
-        BondingCurve storage bC = getBondingCurve[id];
+    function sell(uint256 id, uint256 amountIn, uint256 amountOutMin) public nonReentrant returns (uint256 amountOut) {
+        BondingCurve storage bC = _bondingCurve[id];
         require(!bC.migrated,"POOL_MIGRATED");
         require(amountIn > 0,"0_TOKEN_ERROR");
         require(amountIn <= IWETH9(bC.token0).balanceOf(msg.sender),"NOT_ENOUGH_TOKENS");
 
-        IWETH9(bC.token0).transferFrom(msg.sender, address(this), amountIn);
+        require(IWETH9(bC.token0).transferFrom(msg.sender, address(this), amountIn));
 
         amountOut = FullMath.mulDiv(FullMath.mulDiv(bC.virtualETH,amountIn,(bC.virtualTokens + amountIn)),bC.tokenMul1,bC.tokenMul0);
         require(amountOut >= amountOutMin,"INSUFFICIENT_OUTPUT_AMOUNT");
@@ -430,7 +433,7 @@ contract ThePool {
 
     // @dev    Updates the reserves and also calculates the fees for the buy.
     function updateReserves(uint256 id, uint256 amountOut, uint256 amountIn, bool from0to1, address sender) internal returns (uint256 realOut) {
-        BondingCurve storage bC = getBondingCurve[id];
+        BondingCurve storage bC = _bondingCurve[id];
         swapBlocks[id].push(uint48(block.number));
         uint256 realIn;
         uint256 wethAmount;
@@ -444,13 +447,11 @@ contract ThePool {
             uint256 thetokenMultiplier = FullMath.mulDiv(wethAmount, bC.tokenMul0, bC.tokenMul1);
             amountOut = FullMath.mulDiv(bC.virtualTokens, thetokenMultiplier,(bC.virtualETH + thetokenMultiplier));
 
-            // reserve0 - thisamount < minTokens? trigger refund T_v * E / (E_v + E)
-
             if ((bC.reserve0 - amountOut) <= minimumTokens) {
                 // @dev    Here the migration is triggered. We are refunding the
                 // @dev    one who triggered the migration with the buy the excess ETH.
                 amountOut = bC.reserve0 - minimumTokens;
-                realIn = _refund(id, amountOut, amountIn, sender);
+                realIn = _refund(id, amountOut);
                 bC.migrated = true;
 
                 uint256 value = amountIn - realIn;
@@ -496,15 +497,15 @@ contract ThePool {
 
     // @dev    If the last buy before pool migration sends too much ETH, refund
     // @dev    the difference.
-    function _refund(uint256 id, uint256 realAmountOut, uint256 realETH, address sender) internal returns (uint256 realIn) {
-        BondingCurve storage bC = getBondingCurve[id];        
+    function _refund(uint256 id, uint256 realAmountOut) internal view returns (uint256 realIn) {
+        BondingCurve storage bC = _bondingCurve[id];        
         uint256 tempIn = FullMath.mulDiv(FullMath.mulDiv(realAmountOut, bC.virtualETH, (bC.virtualTokens - realAmountOut)),bC.tokenMul1,bC.tokenMul0);
         realIn = FullMath.mulDiv(tempIn, (10000 + feeOnCurve), 10000);
     }
 
     // @dev    Sets the fee of the buy/sells in the bonding curve.
     function setCurveFee(uint256 bps) public onlyFeeOwner {
-        require((bps >= 25) && (bps <= 100),"Fee bps can only be between 25 and 100.");
+        require((bps >= 25) && (bps <= 100),"BPS_25_100");
         feeOnCurve = bps;
     }
 
@@ -513,8 +514,8 @@ contract ThePool {
         // @dev    UniswapV2Pair init hash code for SEPOLIA, MAINNET, ARBITRUM, POLYGON, BASE, UNICHAIN
         bytes32 initCodeHash = 0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f;
 
-        address token0 = getBondingCurve[id].token0;
-        address token1 = getBondingCurve[id].token1;
+        address token0 = _bondingCurve[id].token0;
+        address token1 = _bondingCurve[id].token1;
 
         (address token01, address token11) = token0 < token1 ? (token0, token1) : (token1, token0);
 
@@ -530,27 +531,28 @@ contract ThePool {
 
     // @dev    Creation of Uniswap V2 pool
     function _createV2pool(uint256 id) internal returns (address pair) {
-        BondingCurve storage bC = getBondingCurve[id];
+        BondingCurve storage bC = _bondingCurve[id];
         address token0 = bC.token0;
+
+        bC.v2pool = true;
 
         IWETH9(WETH).deposit{value: bC.ethPool}();
 
-        IWETH9(WETH).approve(_v2router, type(uint256).max);
-        IWETH9(token0).approve(_v2router, type(uint256).max);
+        require(IWETH9(WETH).approve(_v2router, type(uint256).max));
+        require(IWETH9(token0).approve(_v2router, type(uint256).max));
 
         pair = v2Factory.createPair(WETH, token0);
         v2router.addLiquidity(WETH, token0, bC.ethPool, minimumTokensTransfer, 0, 0, address(0), block.timestamp);
-        bC.v2pool = true;
     }
 
     // @dev    Check if V3 Pool price has been manipulated before migration happened
     function _checkPriceManipulationV3(uint256 id, uint24 feeAmount) internal returns (bool manipulation) {
-        BondingCurve storage bC = getBondingCurve[id];
+        BondingCurve storage bC = _bondingCurve[id];
         address checkPool = v3Factory.getPool(bC.token0, WETH, feeAmount);
 
         if (checkPool != address(0)) {
             token0addr = Iv3Pool(checkPool).token0();
-            uint160 sqrtX = (token0addr != bC.token1) ? SqrtX96Math.getSqrtPriceX96(minimumTokensTransfer, bC.ethPool, 18, 18) : SqrtX96Math.getSqrtPriceX96(bC.ethPool, minimumTokensTransfer, 18, 18);
+            uint160 sqrtX = (token0addr != bC.token1) ? SqrtX96Math.getSqrtPriceX96(minimumTokensTransfer, bC.ethPool) : SqrtX96Math.getSqrtPriceX96(bC.ethPool, minimumTokensTransfer);
             (uint160 sqrtPrice, , , , , , ) = Iv3Pool(checkPool).slot0();
 
             manipulation = (sqrtX == sqrtPrice) ? false : true;
@@ -561,21 +563,19 @@ contract ThePool {
 
     // @dev    Creation of the Uniswap V3 pool
     function _createV3pool(uint256 id, uint24 feeAmount) internal {
-        BondingCurve storage bC = getBondingCurve[id];
+        BondingCurve storage bC = _bondingCurve[id];
         address token00 = bC.token0;
         address token11 = bC.token1;
-        
-        uint256 reserve0 = minimumTokensTransfer;
 
         IWETH9(WETH).deposit{value: bC.ethPool}();
 
-        IWETH9(WETH).approve(_v3positionManager, type(uint256).max);
-        IWETH9(token00).approve(_v3positionManager, type(uint256).max);
+        require(IWETH9(WETH).approve(_v3positionManager, type(uint256).max));
+        require(IWETH9(token00).approve(_v3positionManager, type(uint256).max));
 
         address v3pool = v3Factory.createPool(token00, token11, feeAmount);
         token0addr = Iv3Pool(v3pool).token0();
 
-        uint160 sqrtX = (token0addr != token11) ? SqrtX96Math.getSqrtPriceX96(minimumTokensTransfer, bC.ethPool, 18, 18) : SqrtX96Math.getSqrtPriceX96(bC.ethPool, minimumTokensTransfer, 18, 18);
+        uint160 sqrtX = (token0addr != token11) ? SqrtX96Math.getSqrtPriceX96(minimumTokensTransfer, bC.ethPool) : SqrtX96Math.getSqrtPriceX96(bC.ethPool, minimumTokensTransfer);
         Iv3Pool(v3pool).initialize(sqrtX);
 
         (uint256 tokenId, , , ) = v3positionManager.mint(
@@ -599,7 +599,7 @@ contract ThePool {
 
     // @dev    Check if Uniswap V4 Pool price has been manipulated
     function _checkPriceManipulationV4(uint256 id, uint24 setFee) internal view returns (bool manipulation) {
-        BondingCurve storage bC = getBondingCurve[id];
+        BondingCurve storage bC = _bondingCurve[id];
 
         address token00 = address(0);
         address token11 = bC.token0;
@@ -627,7 +627,7 @@ contract ThePool {
     // --
     // @dev     we create the v4 pool with native currency: ETH. No WETH.
     function _createV4pool(uint256 id, uint24 setFee) internal {
-        BondingCurve storage bC = getBondingCurve[id];
+        BondingCurve storage bC = _bondingCurve[id];
         uint256 amount1 = minimumTokensTransfer; //bC.reserve0; // @dev   token reserve
         uint256 amount0 = bC.ethPool; // @dev   eth to pool
 
@@ -636,13 +636,15 @@ contract ThePool {
         // @dev    Therefor a comparison if address(0) < address(x) will always result in true,
         // @dev    which proves that currency0 is always native ETH.
 
+        uint160 sqrtPriceX96 = SqrtX96Math.getSqrtPriceX96(amount0, amount1);
+        uint128 amount = SqrtX96Math.getLiquidityForAmounts(sqrtPriceX96, amount0, amount1, getMaxTicks[setFee]);
+        IUniswapV4PoolManager.PoolKey memory pool;
+
+        {
         address token00 = address(0);
         address token11 = bC.token0;
 
-        uint160 sqrtPriceX96 = SqrtX96Math.getSqrtPriceX96(amount0, amount1, 18, 18);
-        uint128 amount = SqrtX96Math.getLiquidityForAmounts(sqrtPriceX96, amount0, amount1, getMaxTicks[setFee]);
-
-        IUniswapV4PoolManager.PoolKey memory pool = IUniswapV4PoolManager.PoolKey({
+        pool = IUniswapV4PoolManager.PoolKey({
             currency0: token00,
             currency1: token11,
             fee: setFee,
@@ -652,8 +654,9 @@ contract ThePool {
 
         // @dev    As we use native ETH with address(0) this will always result in token00 = ETH. We need to approve
         // @dev    the other token to permit2.
-        IWETH9(token11).approve(uniPermit2, type(uint256).max);
+        require(IWETH9(token11).approve(uniPermit2, type(uint256).max));
         IAllowanceTransfer(address(uniPermit2)).approve(token11, address(v4POSM), type(uint160).max, type(uint48).max);
+        }
 
         //bytes memory hookData = new bytes(0);
 
@@ -681,7 +684,7 @@ contract ThePool {
             params[0] = abi.encode(poolKey, _tickLower, _tickUpper, liquidity, amount0Max, amount1Max, recipient, hookData);
             params[1] = abi.encode(poolKey.currency0, poolKey.currency1);
 
-            getBondingCurve[id].uniV4Id = uint72(V4PositionManager(v4POSM).nextTokenId());
+            _bondingCurve[id].uniV4Id = uint72(V4PositionManager(v4POSM).nextTokenId());
 
             return (actions, params);
     }   
@@ -693,23 +696,23 @@ contract ThePool {
     // @dev   This is way safer then waiting for an exploit to happen
     // @dev   like on four meme.
     function _activateEmergencyWithdrawal(uint256 id) internal {
-        getBondingCurve[id].manipulation = true;
+        _bondingCurve[id].manipulation = true;
     }
 
     function emergencyWithdrawal(uint256 id, address to) public onlyFeeOwner {
-        require(getBondingCurve[id].manipulation, "Error: No price manipulation detected.");
+        require(_bondingCurve[id].manipulation, "NO_MANIPULATION");
 
-        uint256 balance0 = getBondingCurve[id].reserve0;
-        uint256 balance1 = getBondingCurve[id].reserve1;
+        uint256 balance0 = _bondingCurve[id].reserve0;
+        uint256 balance1 = _bondingCurve[id].reserve1;
 
-        IWETH9(getBondingCurve[id].token0).transfer(to, balance0);
+        require(IWETH9(_bondingCurve[id].token0).transfer(to, balance0));
         payable(to).transfer(balance1);
     }
 
     // @dev    Migration.
     // @dev    We launch the pools as:
     // @dev    I)
-    // @dev    (i)  Uniswap V4 0.5% || to (ii) Uniswap V4 0.25%
+    // @dev    (i)  Uniswap V4 0.5% || ...to (iii)  Uniswap V4 0.25% in 0.05% steps
     // @dev    (iv) Uniswap V3 0.3% || (v)   Uniswap V3 1.0% || (vi)   Uniswap V2
     // @dev    in this order, where (iv) and (v) go to (i) and (ii) and bump the rest
     // @dev    up in the order if launch as V4 is deactivated.
@@ -719,16 +722,23 @@ contract ThePool {
     // @dev    bonding curve this will always launch as this pool, even if migration happens
     // @dev    in the far future.
     function _migrate(uint256 id) internal {
-        BondingCurve storage bC = getBondingCurve[id];
-        ERC20(bC.token0).transfer(feeOwner, 2000000 * 10 ** 18);
+        BondingCurve storage bC = _bondingCurve[id];
+        require(ERC20(bC.token0).transfer(feeOwner, 2000000 * 10 ** 18));
         bC.reserve0 -= 2000000 * 10 ** 18;
 
         // @dev Locks the reserved tokens into the FeeOwner Contract for
         // @dev 50% for 6 months and 50% for 1 year.
-        FeeCollector(payable(feeOwner)).lockTokens(bC.token0, id);
+        FeeCollector(payable(feeOwner)).lockTokens(bC.token0);
 
         _migrationSplit(bC.reserve1 - bC.ethPool, bC.creator);
 
+        // v4 pools work with 2500, 3000, 3500, 4000, 4500, 5000, 10000 fee levels
+        // v3 with 3000 and 10000
+        // *how to tell in which order we want to launch? -> array
+        // make to eth required changeable to account for rising/falling prices for ETH.
+        // make it only changeable every 1 month
+        // only do the for loop if entering into v4 check
+        //
         uint256 migratedTo;
         uint256 migratedFee;
         if (bC.launchAsV4) {
@@ -756,15 +766,15 @@ contract ThePool {
                 migratedTo = 0; migratedFee = 0;
             }
         } else {
-            if (!_checkPriceManipulationV3(id, 3000)) { // test
+            if (!_checkPriceManipulationV3(id, 3000)) {
                 _createV3pool(id, 3000);
                 migratedTo = 3; migratedFee = 3000;
             }
-            else if (!_checkPriceManipulationV3(id, 10000)) {  // test
+            else if (!_checkPriceManipulationV3(id, 10000)) {
                 _createV3pool(id, 10000);
                 migratedTo = 3; migratedFee = 10000;
             }
-            else if (!_checkPriceManipulationV2(id)) { // test
+            else if (!_checkPriceManipulationV2(id)) {
                 _createV2pool(id);
                 migratedTo = 2; migratedFee = 0;
             }
@@ -784,14 +794,14 @@ contract ThePool {
     function _v4loop(uint256 id) internal returns (bool manipulation) {
         manipulation = true;
 
-        for (uint8 i = 0; i < v4orderArray.length; i++) {
+        uint8 theLength = uint8(v4orderArray.length);
+
+        for (uint8 i = 0; i < theLength; i++) {
             uint24 feeLevel = uint24(v4orderArray[i]) * uint24(100);
             // @dev    We need to multiply the v4orderArray by 100 as we use uint8.
-            if (!_checkPriceManipulationV4(id, feeLevel/*uint24(v4orderArray[i]) * 100)*/)) {
+            if (!_checkPriceManipulationV4(id, feeLevel)) {
                 manipulation = false;
-                v4launcher = feeLevel;//uint24(v4orderArray[i]) * 100;
-                // where to return the fee which is ok to launch?
-                // just save it into a global value.
+                v4launcher = feeLevel;
                 break;
             }
         }
@@ -805,8 +815,8 @@ contract ThePool {
     function v4order(uint8[7] memory instruction) public onlyFeeOwner {
         // check if every entry divided by 500 is 0 (a % b)
         for (uint256 i = 0; i < instruction.length; i++) {
-            require(instruction[i] % 5 == 0, "Error: You can only set 25, 30, 35, 40, 45, 50, and 100 as valid fee levels.");
-            require(((instruction[i] >= 25) && (instruction[i] <= 50)) || (instruction[i] == 100), "Error: You can only set 25, 30, 35, 40, 45, 50, and 100 as valid fee levels.");
+            require(instruction[i] % 5 == 0, "WRONG_BPS");
+            require(((instruction[i] >= 25) && (instruction[i] <= 50)) || (instruction[i] == 100), "WRONG_BPS");
             v4orderArray[i] = instruction[i];
         }
     }
@@ -814,9 +824,9 @@ contract ThePool {
     // @dev    This lets the FeeOwner Contract claim the collected fees on Uniswap V3/V4.
     // @dev    Reverts if a Uniswap V2 pool got created due price manipulations.
     function claim(uint256 id) external onlyFeeOwner returns (address _token0, address _token1) {
-        BondingCurve storage bC = getBondingCurve[id];
-        require(bC.migrated, "Error: Pool has not yet migrated.");
-        require(!bC.v2pool, "Error: Pool is Uniswap V2.");
+        BondingCurve storage bC = _bondingCurve[id];
+        require(bC.migrated, "NOT_MIGRATED");
+        require(!bC.v2pool, "IS_V2");
 
         // @dev   This claims on V4
         if (bC.uniV4Id > 0) {
@@ -857,7 +867,7 @@ contract ThePool {
 
             IWETH9(WETH).withdraw(WETHAmount);
             payable(feeOwner).transfer(WETHAmount);
-            IWETH9(_token0).transfer(feeOwner, IWETH9(bC.token0).balanceOf(address(this)));
+            require(IWETH9(_token0).transfer(feeOwner, IWETH9(bC.token0).balanceOf(address(this))));
         }
     }
 }
