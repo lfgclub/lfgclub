@@ -30,6 +30,7 @@ components:
     await factory.setPoolAddress(pool.address);
     ```
 
+*Steps 4 to 10 are optional, you don't need to use it.*
 4. *Optional.* **Deploy the Native token (LFGClubToken)** (args: name, symbol, metadataHash, factoryAddress, tokenId)  
    
     ```solidity
