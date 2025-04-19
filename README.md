@@ -22,7 +22,7 @@ You can skip 4 to 10 if you don't want a native token nor a depositor contract.
 
 Because of bytecode init restriction this needed to be splitted up like that.
 
-Don't forget to install @openzeppelin/contracts -- for example via npm (you need it as v5)
+Don't forget to install @openzeppelin/contracts (v5 is required) -- for example via npm
 
 ```
 npm install @openzeppelin/contracts
